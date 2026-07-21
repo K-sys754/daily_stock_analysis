@@ -22,6 +22,22 @@ import litellm
 from json_repair import repair_json
 from litellm import Router
 
+# ======================【修复核心：新增 AnalysisResult 实体类】======================
+@dataclass
+class AnalysisResult:
+    """结构化AI分析结果实体，解决模块导入失败错误"""
+    stock_code: str = ""
+    stock_name: str = ""
+    analysis_summary: str = ""
+    operation_advice: str = ""
+    sentiment_score: Optional[int] = None
+    decision_type: str = "hold"
+    risk_warning: Any = None
+    dashboard: Optional[Dict[str, Any]] = None
+    report_language: str = "zh"
+    current_price: Optional[float] = None
+# ==================================================================================
+
 from src.agent.llm_adapter import (
     get_thinking_extra_body,
     resolve_fallback_litellm_wire_models,
@@ -297,7 +313,7 @@ from src.utils.data_processing import normalize_report_signal_attribution
 
 
 def check_content_integrity(
-    result: "AnalysisResult",
+    result: AnalysisResult,
     *,
     require_phase_decision: bool = False,
 ) -> Tuple[bool, List[str]]:
@@ -375,7 +391,7 @@ def check_content_integrity(
     return len(missing) == 0, missing
 
 
-def apply_placeholder_fill(result: "AnalysisResult", missing_fields: List[str]) -> None:
+def apply_placeholder_fill(result: AnalysisResult, missing_fields: List[str]) -> None:
     """Fill missing mandatory fields with placeholders (in-place). Module-level for pipeline."""
 
     def _is_blank_text(value: Any) -> bool:
@@ -488,8 +504,9 @@ def apply_placeholder_fill(result: "AnalysisResult", missing_fields: List[str]) 
                 if not isinstance(phase_decision.get("data_limitations"), list):
                     phase_decision["data_limitations"] = []
             elif field in phase_decision_placeholders:
-                if _is_blank_text(phase_decision.get(field.rsplit(".", 1)[-1])):
-                    phase_decision[field.rsplit(".", 1)[-1]] = phase_decision_placeholders[field]
+                key = field.rsplit(".", 1)[-1]
+                if _is_blank_text(phase_decision.get(key)):
+                    phase_decision[key] = phase_decision_placeholders[field]
 
 
 # ---------- chip_structure fallback (Issue #589) ----------
@@ -889,7 +906,7 @@ def _has_meaningful_chip_data(chip_data: Any) -> bool:
     )
 
 
-def _mark_chip_structure_unavailable(result: "AnalysisResult", language: str) -> None:
+def _mark_chip_structure_unavailable(result: AnalysisResult, language: str) -> None:
     if not result or not isinstance(result.dashboard, dict):
         return
     data_perspective = result.dashboard.get("data_perspective")
@@ -899,7 +916,7 @@ def _mark_chip_structure_unavailable(result: "AnalysisResult", language: str) ->
     data_perspective["chip_unavailable_reason"] = get_chip_unavailable_text(language)
 
 
-def normalize_chip_structure_availability(result: "AnalysisResult", chip_data: Any) -> None:
+def normalize_chip_structure_availability(result: AnalysisResult, chip_data: Any) -> None:
     """Fill valid chip metrics or collapse placeholder-only chip fields to one fallback line."""
     if not result:
         return
@@ -910,7 +927,7 @@ def normalize_chip_structure_availability(result: "AnalysisResult", chip_data: A
     _mark_chip_structure_unavailable(result, language)
 
 
-def fill_chip_structure_if_needed(result: "AnalysisResult", chip_data: Any) -> None:
+def fill_chip_structure_if_needed(result: AnalysisResult, chip_data: Any) -> None:
     """When chip_data exists, fill chip_structure placeholder fields from chip_data (in-place)."""
     if not result or not _has_meaningful_chip_data(chip_data):
         return
@@ -942,7 +959,7 @@ _PRICE_POS_KEYS = ("ma5", "ma10", "ma20", "bias_ma5", "bias_status", "current_pr
 
 
 def fill_price_position_if_needed(
-    result: "AnalysisResult",
+    result: AnalysisResult,
     trend_result: Any = None,
     realtime_quote: Any = None,
 ) -> None:
@@ -993,7 +1010,7 @@ def fill_price_position_if_needed(
 
 
 def stabilize_decision_with_structure(
-    result: "AnalysisResult",
+    result: AnalysisResult,
     trend_result: Any = None,
     fundamental_context: Optional[Dict[str, Any]] = None,
 ) -> None:
@@ -1171,7 +1188,7 @@ def stabilize_decision_with_structure(
         logger.warning("[decision_stability] skipped: %s", exc)
 
 
-def _has_structural_risk_alert(result: "AnalysisResult") -> bool:
+def _has_structural_risk_alert(result: AnalysisResult) -> bool:
     dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
 
     risk_text = getattr(result, "risk_warning", "")
@@ -1208,7 +1225,7 @@ def _is_significant_structural_risk(value: Any) -> bool:
     return "重大" in text and "风险" in normalized
 
 
-def _sync_stability_dashboard_fields(result: "AnalysisResult") -> None:
+def _sync_stability_dashboard_fields(result: AnalysisResult) -> None:
     dashboard = result.dashboard if isinstance(result.dashboard, dict) else {}
     result.dashboard = dashboard
     dashboard["sentiment_score"] = getattr(result, "sentiment_score", None)
@@ -1246,5 +1263,4 @@ def _coerce_numeric_value(value: Any) -> Optional[float]:
     text = str(value).replace(",", "").replace("，", "").strip()
     if not text or text.upper() in {"N/A", "NA", "NONE", "NULL"}:
         return None
-    match = re.search(r"[-+]?\d+(?:\.\d+)?", text)
-   
+    match =
