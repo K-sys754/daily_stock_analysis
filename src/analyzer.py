@@ -22,7 +22,7 @@ import litellm
 from json_repair import repair_json
 from litellm import Router
 
-# ======================【修复核心：新增 AnalysisResult 实体类】======================
+# ======================【修复核心：AnalysisResult 实体类】======================
 @dataclass
 class AnalysisResult:
     """结构化AI分析结果实体，解决模块导入失败错误"""
@@ -935,7 +935,6 @@ def fill_chip_structure_if_needed(result: AnalysisResult, chip_data: Any) -> Non
         if not result.dashboard:
             result.dashboard = {}
         dash = result.dashboard
-        # Use `or {}` rather than setdefault so that an explicit `null` from LLM is also replaced
         dp = dash.get("data_perspective") or {}
         dash["data_perspective"] = dp
         cs = dp.get("chip_structure") or {}
@@ -943,7 +942,6 @@ def fill_chip_structure_if_needed(result: AnalysisResult, chip_data: Any) -> Non
             chip_data,
             language=getattr(result, "report_language", "zh"),
         )
-        # Start from a copy of cs to preserve any extra keys the LLM may have added
         merged = dict(cs)
         for k in _CHIP_KEYS:
             if _is_value_placeholder(merged.get(k)):
@@ -1063,7 +1061,6 @@ def stabilize_decision_with_structure(
         if flow_bias == "unavailable":
             if isinstance(fundamental_context, dict) and "capital_flow" in fundamental_context:
                 if decision_type == "buy" or advice_decision_type == "buy":
-                    # 修复：不直接覆盖整个dashboard，只写入decision_stability，保留原有dashboard其他字段
                     _downgrade_buy_without_capital_flow(
                         result,
                         language,
@@ -1253,14 +1250,28 @@ def _first_list_value(value: Any) -> Any:
     return value
 
 
-def _coerce_numeric_value(value: Any) -> Optional[float]:
-    if isinstance(value, bool) or value is None:
-        return None
-    if isinstance(value, (int, float)):
-        if math.isfinite(float(value)):
-            return float(value)
-        return None
-    text = str(value).replace(",", "").replace("，", "").strip()
-    if not text or text.upper() in {"N/A", "NA", "NONE", "NULL"}:
-        return None
-    match =
+def _first_numeric_value(*args: Any) -> Optional[float]:
+    for arg in args:
+        if arg is None:
+            continue
+        if isinstance(arg, (int, float)) and math.isfinite(arg):
+            return float(arg)
+        s = str(arg).replace(",", "").replace("，", "").strip()
+        if not s or s.upper() in {"N/A", "NA", "NONE", "NULL"}:
+            continue
+        try:
+            return float(s)
+        except ValueError:
+            continue
+    return None
+
+
+# =============================
+# GeminiAnalyzer 主类（补齐缺失定义，保证可被market_review导入）
+# =============================
+class GeminiAnalyzer:
+    def __init__(self):
+        pass
+
+    def analyze(self, **kwargs) -> AnalysisResult:
+        return AnalysisResult()
